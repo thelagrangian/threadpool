@@ -1,4 +1,4 @@
-#include "../include/threadpool.h"
+#include <threadpool.h>
 
 
 void *thread_start(void* start_arg){

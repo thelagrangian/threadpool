@@ -1,7 +1,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "include/threadpool.h"
+#include <threadpool.h>
 
 /*
 typedef void* (*start_func_t)(void*);
