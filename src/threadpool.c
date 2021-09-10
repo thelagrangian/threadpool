@@ -9,11 +9,10 @@ void *thread_start(void* start_arg){
     pthread_cond_t *cond = arg->cond;
 
     int *to_join = arg->to_join;
-    int *beginidx = arg->beginidx;
-    int *endidx = arg->endidx;
+    circularqueue_t *task_queue = arg->task_queue;
+    circularqueue_t *argt_queue = arg->argt_queue;
     callback_t callback = NULL;
-    void **callback_arg = NULL;
-    int num_tasks = arg->num_tasks;
+    void *callback_arg = NULL;
 
     struct timespec to;
 
@@ -24,17 +23,18 @@ void *thread_start(void* start_arg){
 
         pthread_mutex_lock(mutex);
 
-        while(*beginidx == *endidx) {
+        while(circularqueue_empty(task_queue)) {
             pthread_cond_timedwait(cond, mutex, &to);
             if(*arg->to_join) {
                 break;
             }
         }
 
-        if(*beginidx != *endidx){
-            callback = arg->task_func_queue[*beginidx];
-            callback_arg = arg->task_arg_queue[*beginidx];
-            *beginidx = (*beginidx + 1) % (num_tasks + 1);
+        if(!circularqueue_empty(task_queue)) {
+            callback = circularqueue_front(task_queue);
+            callback_arg = circularqueue_front(argt_queue);
+            circularqueue_pop_front(task_queue);
+            circularqueue_pop_front(argt_queue);
         }
 
         pthread_mutex_unlock(mutex);
@@ -57,11 +57,8 @@ int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks){
     threadpool->num_threads = num_threads;
     threadpool->num_tasks = num_tasks;
 
-    threadpool->beginidx = 0;
-    threadpool->endidx = 0;
-
-    threadpool->task_func_queue = (callback_t*) malloc(num_tasks * sizeof(callback_t));
-    threadpool->task_arg_queue = (void**) malloc(num_tasks * sizeof(void*));
+    circularqueue_init(&threadpool->task_queue, num_tasks);
+    circularqueue_init(&threadpool->argt_queue, num_tasks);
 
     threadpool->threads = (pthread_t*) malloc(num_threads * sizeof(pthread_t));
 
@@ -77,13 +74,10 @@ int threadpool_create(threadpool_t *threadpool) {
     int num_threads = threadpool->num_threads;
 
     threadpool->start_arg.to_join = &threadpool->to_join;
-    threadpool->start_arg.num_tasks = threadpool->num_tasks;
     threadpool->start_arg.mutex = &threadpool->mutex;
     threadpool->start_arg.cond = &threadpool->cond;
-    threadpool->start_arg.task_func_queue = threadpool->task_func_queue;
-    threadpool->start_arg.task_arg_queue = threadpool->task_arg_queue;
-    threadpool->start_arg.beginidx = &threadpool->beginidx;
-    threadpool->start_arg.endidx = &threadpool->endidx;
+    threadpool->start_arg.task_queue = &threadpool->task_queue;
+    threadpool->start_arg.argt_queue = &threadpool->argt_queue;
 
     int ret = 0;
     int i;
@@ -98,19 +92,15 @@ int threadpool_submit(threadpool_t *threadpool, callback_t cb, void *cb_arg) {
 
     pthread_mutex_t *mutex = &threadpool->mutex;
     pthread_cond_t *cond = &threadpool->cond;
-    int *beginidx = &threadpool->beginidx;
-    int *endidx = &threadpool->endidx;
-    int num_tasks = threadpool->num_tasks;
 
     int ret;
     pthread_mutex_lock(mutex);
 
-    if((*endidx + 1) % (num_tasks + 1) == *beginidx) {
+    if(circularqueue_full(&threadpool->task_queue)) {
         ret = -1;
     } else {
-        threadpool->task_func_queue[*endidx] = cb;
-        threadpool->task_arg_queue[*endidx] = cb_arg;
-        *endidx = (*endidx + 1) % (num_tasks + 1);
+        circularqueue_push_back(&threadpool->task_queue, cb);
+        circularqueue_push_back(&threadpool->argt_queue, cb_arg);
         ret = 0;
         pthread_cond_broadcast(cond);
     }
@@ -138,8 +128,8 @@ int threadpool_join(threadpool_t *threadpool) {
 int threadpool_destroy(threadpool_t *threadpool) {
 
     free(threadpool->threads);
-    free(threadpool->task_func_queue);
-    free(threadpool->task_arg_queue);
+    circularqueue_destroy(&threadpool->task_queue);
+    circularqueue_destroy(&threadpool->argt_queue);
 
     pthread_mutex_destroy(&threadpool->mutex);
     pthread_cond_destroy(&threadpool->cond);

@@ -6,33 +6,31 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <circularqueue/circularqueue.h>
 
 typedef void* (*callback_t)(void*);
 
 struct start_arg_t {
+
     int *to_join;
-    int num_tasks;
 
     pthread_mutex_t *mutex;
     pthread_cond_t *cond;
 
-    callback_t *task_func_queue;
-    void **task_arg_queue;
-    int *beginidx;
-    int *endidx;
+    circularqueue_t *task_queue;
+    circularqueue_t *argt_queue;
 };
 
 typedef struct start_arg_t start_arg_t;
 
 struct threadpool_t {
+
     int to_join;
     int num_threads;
     int num_tasks;
 
-    callback_t *task_func_queue;
-    void **task_arg_queue;
-    int beginidx;
-    int endidx;
+    circularqueue_t task_queue;
+    circularqueue_t argt_queue;
 
     pthread_t *threads;
     pthread_mutex_t mutex;
