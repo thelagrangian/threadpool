@@ -4,14 +4,20 @@ project(threadpool)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-include_directories(include)
- 
-set(SOURCES main.c
-            src/threadpool.c
-            src/circularqueue/circularqueue.c)
+# include_directories(include)
  
 # file(GLOB...) allows for wildcard additions:
 # file(GLOB SOURCES "src/*.c")
- 
-add_executable(main ${SOURCES})
-target_link_libraries(main PRIVATE Threads::Threads)
+
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin )
+set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib ) # static library
+# set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib ) # shared library
+
+# add_executable(main ${SOURCES})
+# target_link_libraries(main PRIVATE Threads::Threads)
+
+# add_library(threadpool STATIC ${SOURCES})
+# target_link_libraries(threadpool PRIVATE Threads::Threads)
+
+add_subdirectory(src)
+add_subdirectory(test)
