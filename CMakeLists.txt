@@ -4,6 +4,8 @@ project(threadpool)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 # include_directories(include)
  
 # file(GLOB...) allows for wildcard additions:

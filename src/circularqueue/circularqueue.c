@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <circularqueue/circularqueue.h>
 
 int circularqueue_init(circularqueue_t *cqueue, int qcapacity) {

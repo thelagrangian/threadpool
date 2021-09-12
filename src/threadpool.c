@@ -1,7 +1,11 @@
+#include <error/error_macro.h>
+#include <constants.h>
 #include <threadpool.h>
 
 
 void *thread_start(void* start_arg){
+
+    int s;
 
     start_arg_t* arg = (start_arg_t*)start_arg;
 
@@ -18,13 +22,18 @@ void *thread_start(void* start_arg){
 
     while(!*arg->to_join){
 
-        clock_gettime(CLOCK_MONOTONIC, &to);
-        to.tv_sec += 1;
-
-        pthread_mutex_lock(mutex);
+        s = pthread_mutex_lock(mutex);
+        POSIX_CHECK(s);
 
         while(circularqueue_empty(task_queue)) {
-            pthread_cond_timedwait(cond, mutex, &to);
+
+            clock_gettime(CLOCK_MONOTONIC, &to);
+            to.tv_sec += cond_wait_timeout_sec;
+
+            s = pthread_cond_timedwait(cond, mutex, &to);
+            if (s != ETIMEDOUT) {
+                POSIX_CHECK(s);
+            }
             if(*arg->to_join) {
                 break;
             }
@@ -37,7 +46,8 @@ void *thread_start(void* start_arg){
             circularqueue_pop_front(argt_queue);
         }
 
-        pthread_mutex_unlock(mutex);
+        s = pthread_mutex_unlock(mutex);
+        POSIX_CHECK(s);
 
         if(callback != NULL) {
             callback(callback_arg);
@@ -47,10 +57,14 @@ void *thread_start(void* start_arg){
 
     }
 
-    return NULL;
+    return start_arg;
 }
 
-int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks){
+int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks,
+                    const pthread_attr_t *attr,
+                    const pthread_mutexattr_t *mutexattr) {
+
+    int s;
 
     threadpool->to_join = 0;
 
@@ -61,13 +75,26 @@ int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks){
     circularqueue_init(&threadpool->argt_queue, num_tasks);
 
     threadpool->threads = (pthread_t*) malloc(num_threads * sizeof(pthread_t));
+    threadpool->attr = attr;
+    threadpool->mutexattr = mutexattr;
 
-    pthread_mutex_init(&threadpool->mutex, NULL);
-    pthread_condattr_init(&threadpool->condattr);
-    pthread_condattr_setclock(&threadpool->condattr, CLOCK_MONOTONIC);
-    pthread_cond_init(&threadpool->cond, &threadpool->condattr);
+    s = pthread_mutex_init(&threadpool->mutex, threadpool->mutexattr);
+    POSIX_CHECK(s);
+
+    s = pthread_condattr_init(&threadpool->condattr);
+    POSIX_CHECK(s);
+    s = pthread_condattr_setclock(&threadpool->condattr, CLOCK_MONOTONIC);
+    POSIX_CHECK(s);
+    s = pthread_cond_init(&threadpool->cond, &threadpool->condattr);
+    POSIX_CHECK(s);
 
     return 0;
+
+}
+
+int threadpool_init_default(threadpool_t *threadpool, int num_threads, int num_tasks) {
+
+    return threadpool_init(threadpool, num_threads, num_tasks, NULL, NULL);
 }
 
 int threadpool_create(threadpool_t *threadpool) {
@@ -79,13 +106,13 @@ int threadpool_create(threadpool_t *threadpool) {
     threadpool->start_arg.task_queue = &threadpool->task_queue;
     threadpool->start_arg.argt_queue = &threadpool->argt_queue;
 
-    int ret = 0;
-    int i;
+    int s, i;
     for(i = 0; i < num_threads; ++i) {
-        ret = ret || pthread_create(threadpool->threads + i, NULL, thread_start, &threadpool->start_arg);
+        s = pthread_create(threadpool->threads + i, threadpool->attr, thread_start, &threadpool->start_arg);
+        POSIX_CHECK(s);
     }
 
-    return ret;
+    return 0;
 }
 
 int threadpool_submit(threadpool_t *threadpool, callback_t cb, void *cb_arg) {
@@ -93,19 +120,22 @@ int threadpool_submit(threadpool_t *threadpool, callback_t cb, void *cb_arg) {
     pthread_mutex_t *mutex = &threadpool->mutex;
     pthread_cond_t *cond = &threadpool->cond;
 
-    int ret;
-    pthread_mutex_lock(mutex);
+    int ret, s;
+    s = pthread_mutex_lock(mutex);
+    POSIX_CHECK(s);
 
     if(circularqueue_full(&threadpool->task_queue)) {
-        ret = -1;
+        ret = 1;
     } else {
         circularqueue_push_back(&threadpool->task_queue, cb);
         circularqueue_push_back(&threadpool->argt_queue, cb_arg);
         ret = 0;
-        pthread_cond_broadcast(cond);
+        s = pthread_cond_broadcast(cond);
+        POSIX_CHECK(s);
     }
 
-    pthread_mutex_unlock(mutex);
+    s = pthread_mutex_unlock(mutex);
+    POSIX_CHECK(s);
 
     return ret;
 }
@@ -115,25 +145,30 @@ int threadpool_join(threadpool_t *threadpool) {
     threadpool->to_join = 1;
 
     int num_threads = threadpool->num_threads;
-    int i;
+    int s, i;
 
-    int ret = 0;
     for(i = 0; i < num_threads; ++i) {
-        ret = ret || pthread_join(threadpool->threads[i], NULL);
+        s = pthread_join(threadpool->threads[i], NULL);
+        POSIX_CHECK(s);
     }
 
-    return ret;
+    return 0;
 }
 
 int threadpool_destroy(threadpool_t *threadpool) {
+
+    int ret = 0, s;
 
     free(threadpool->threads);
     circularqueue_destroy(&threadpool->task_queue);
     circularqueue_destroy(&threadpool->argt_queue);
 
-    pthread_mutex_destroy(&threadpool->mutex);
-    pthread_cond_destroy(&threadpool->cond);
-    pthread_condattr_destroy(&threadpool->condattr);
+    s = pthread_mutex_destroy(&threadpool->mutex);
+    POSIX_CHECK(s);
+    s = pthread_cond_destroy(&threadpool->cond);
+    POSIX_CHECK(s);
+    s = pthread_condattr_destroy(&threadpool->condattr);
+    POSIX_CHECK(s);
 
-    return 0;
+    return ret;
 }

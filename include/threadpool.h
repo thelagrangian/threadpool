@@ -33,6 +33,8 @@ struct threadpool_t {
     circularqueue_t argt_queue;
 
     pthread_t *threads;
+    const pthread_attr_t *attr;
+    const pthread_mutexattr_t *mutexattr;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     pthread_condattr_t condattr;
@@ -44,7 +46,11 @@ typedef struct threadpool_t threadpool_t;
 
 void *thread_start(void* start_arg);
 
-int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks);
+int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks,
+                    const pthread_attr_t *attr,
+                    const pthread_mutexattr_t *mutexattr);
+
+int threadpool_init_default(threadpool_t *threadpool, int num_threads, int num_tasks);
 
 int threadpool_create(threadpool_t *threadpool);
 
