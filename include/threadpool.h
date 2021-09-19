@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sched.h>
+
 #include <circularqueue/circularqueue.h>
 
 typedef void* (*callback_t)(void*);
@@ -28,6 +30,8 @@ struct threadpool_t {
     int to_join;
     int num_threads;
     int num_tasks;
+    unsigned int main_thread_cpu;
+    unsigned int main_thread_node;
 
     circularqueue_t task_queue;
     circularqueue_t argt_queue;

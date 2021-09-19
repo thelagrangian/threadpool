@@ -21,5 +21,7 @@ set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib ) # static library
 # add_library(threadpool STATIC ${SOURCES})
 # target_link_libraries(threadpool PRIVATE Threads::Threads)
 
+set(CMAKE_C_FLAGS "-D_GNU_SOURCE")
+
 add_subdirectory(src)
 add_subdirectory(test)

@@ -88,6 +88,15 @@ int threadpool_init(threadpool_t *threadpool, int num_threads, int num_tasks,
     s = pthread_cond_init(&threadpool->cond, &threadpool->condattr);
     POSIX_CHECK(s);
 
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    s = sched_getaffinity(getpid(), sizeof(set), &set);
+    POSIX_CHECK(s);
+    s = sched_setaffinity(getpid(), sizeof(set), &set);
+    POSIX_CHECK(s);
+    s = getcpu(&threadpool->main_thread_cpu, &threadpool->main_thread_node);
+    POSIX_CHECK(s);
+
     return 0;
 
 }
@@ -106,10 +115,29 @@ int threadpool_create(threadpool_t *threadpool) {
     threadpool->start_arg.task_queue = &threadpool->task_queue;
     threadpool->start_arg.argt_queue = &threadpool->argt_queue;
 
-    int s, i;
-    for(i = 0; i < num_threads; ++i) {
-        s = pthread_create(threadpool->threads + i, threadpool->attr, thread_start, &threadpool->start_arg);
+    cpu_set_t set;
+    pthread_attr_t attr;
+    if (threadpool->attr != NULL) {
+        attr = *threadpool->attr;
+    }
+
+    const int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    int s, i, cpu_id;
+    i = 0;
+    cpu_id = i;
+    for( ; i < num_threads; ++i) {
+        if (cpu_id == threadpool->main_thread_cpu) {
+            cpu_id = (cpu_id + 1)%num_cpus;
+        }
+
+        CPU_ZERO(&set);
+        CPU_SET(cpu_id, &set);
+        s = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &set);
         POSIX_CHECK(s);
+        s = pthread_create(threadpool->threads + i, &attr, thread_start, &threadpool->start_arg);
+        POSIX_CHECK(s);
+
+        cpu_id = (cpu_id + 1)%num_cpus;
     }
 
     return 0;
